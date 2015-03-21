@@ -19,10 +19,12 @@ Creating a calculator suitable for children aged 5 - 8 years old.
  * Reworked code to make it more efficient.
  * Changed the method behind determining when a value should be a decimal or not.
  * More bug fixes.
+ 
 ###Version 2.2
  * If the top display has a lot of characters (33 or more) and begins to go off screen, then show "<<" to signify that.
  * Added more comments.
  * Fixed a bug that made the bottom display have characters run off the screen.
+ 
  ###Version 2.3
  * Added more comments.
  * Fixed a bug when hitting equals (the button or the key) would reset the top display so you couldn't see the full sum.
