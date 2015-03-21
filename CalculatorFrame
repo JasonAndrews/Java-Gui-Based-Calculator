@@ -1,0 +1,813 @@
+/*
+ * Creating a calculator suitable for children aged 5 - 8 years old.
+ * 
+ * @author Colin Vaughan, J-P Williams & Jason Andrews.
+ * @version 2.0 - Updated version which includes a number of bug fixes.
+ * @version 2.1 -
+ * 					Added automatic calculations when selecting another operation type.
+ * 					Reworked code to make it more efficient.
+ * 					Changed the method behind determining when a value should be a decimal or not.
+ * 					More bug fixes.
+ * @version 2.2 - 
+ * 					If the top display has a lot of characters (33 or more) and begins to go off screen, then show "<<" to signify that.
+ * 					Added more comments.
+ * 					Fixed a bug that made the bottom display have characters run off the screen.
+ * @version 2.3 - 
+ * 					Added more comments.
+ * 					Fixed a bug when hitting equals (the button or the key) would reset the top display so you couldn't see the full sum.
+ * 					Fixed a bug when hitting equals (the button or the key) and then pressing a number would not reset the bottom display to just display the new number. 
+ * 					Fixed a bug when hitting equals (the button or the key) and then pressing the decimal point key wouldn't put a '0' before the '.' character.
+ */
+
+package com.jasonandrews.ocja.clackulator;
+
+import java.awt.EventQueue;
+
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.border.EmptyBorder;
+import javax.swing.JButton;
+
+import java.awt.event.ActionListener;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+
+import javax.swing.JTextField;
+import javax.swing.SwingConstants;
+
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.SystemColor;
+import javax.swing.border.LineBorder;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import javax.swing.JLabel;
+
+public class CalculatorFrame extends JFrame implements Runnable, KeyListener{
+
+	private static final char MULTIPLICATION_SYMBOL = '\u00D7'; 
+	private static final char DIVISION_SYMBOL = '\u00F7'; 
+	private static final char BACKSPACE_ARROW_SYMBOL = '\u2190';
+	
+	private static final int OPERATION_TYPE_NONE = 0;
+	private static final int OPERATION_TYPE_ADDITION = 1;
+	private static final int OPERATION_TYPE_SUBTRACTION = 2;
+	private static final int OPERATION_TYPE_MULTIPLICATION = 3;
+	private static final int OPERATION_TYPE_DIVISION = 4;
+	
+	private CalculatorFrame frame;
+	private Calculator calculator;
+	private StringBuilder displaySb;
+	private StringBuilder operationDisplaySb;
+	private Thread thread;
+	
+	private boolean operationReady;
+	private boolean clickedEquals;
+	private boolean dividedByZero;
+	private double value1 = 0.0D;
+	private double value2 = 0.0D;
+	private double value3 = 0.0D;
+	private boolean shiftPressed;
+	private long keyEnteredTime = 0L;
+	private int oldOperation = OPERATION_TYPE_NONE;
+	private int currentOperation = OPERATION_TYPE_NONE;
+	private boolean replaceDisplayChar;
+	
+	private JPanel contentPane;
+	private JTextField displayField;
+	private JButton buttonZero = new JButton("0");
+	private JButton buttonOne = new JButton("1");
+	private JButton buttonTwo = new JButton("2");
+	private JButton buttonThree = new JButton("3");
+	private JButton buttonFour = new JButton("4");
+	private JButton buttonFive = new JButton("5");
+	private JButton buttonSix = new JButton("6");
+	private JButton buttonSeven = new JButton("7");
+	private JButton buttonEight = new JButton("8");
+	private JButton buttonNine = new JButton("9");
+	private JButton buttonAddition = new JButton("+");
+	private JButton buttonSubtraction = new JButton("-");
+	private JButton buttonDivision = new JButton(""+DIVISION_SYMBOL);
+	private JButton buttonMultiplication = new JButton(""+MULTIPLICATION_SYMBOL);
+	private JButton buttonEquals = new JButton("=");
+	private final JButton buttonClearAll = new JButton("CLEAR");
+	private final JButton buttonBackSpace = new JButton(""+BACKSPACE_ARROW_SYMBOL);
+	private final JTextField displayWaitingOperation = new JTextField();
+	private final JButton buttonDecimal = new JButton(".");
+	private final JPanel panel = new JPanel();
+	
+	private JLabel doubleArrowsLb = new JLabel("<<");
+	/**
+	 * Launch the application.
+	 */
+	public static void main(String[] args) {
+		EventQueue.invokeLater(new Runnable() {
+			public void run() {
+				try {
+					CalculatorFrame frame = new CalculatorFrame();
+					frame.setVisible(true);
+					
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		});
+	}
+
+	/**
+	 * Create the frame.
+	 */
+	public CalculatorFrame() {
+		
+		addMouseListener(new MouseAdapter() { //Add a MouseAdapter to the frame.
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				frame.requestFocus(); //every time they click, request focus to the frame so the keylistener works.
+			}
+		});
+		setTitle("Clackulator");
+		this.setFocusable(true); //Allow the frame to be focusable.
+		this.frame = this; //Set our 'frame' object reference variable to refer to this object so we can use 'frame' where 'this' wouldn't be usable (like in ActionEvents).
+		
+		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		setBounds(100, 100, 343, 333);
+		contentPane = new JPanel();
+		contentPane.setBackground(SystemColor.activeCaption);
+		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
+		contentPane.setLayout(null);
+		addKeyListener(frame);//Add a KeyListener to the frame.
+		setContentPane(contentPane);
+		
+		this.calculator = new Calculator(); //Create a new Calculator object and assign it to our object reference variable.
+		this.displaySb = new StringBuilder().append("0"); //Create a new StringBuilder object and assign it to our object reference variable.
+		this.operationDisplaySb = new StringBuilder(); //Create a new StringBuilder object and assign it to our object reference variable.
+		
+		
+		//Create all the buttons.
+		buttonZero.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonZero.setBackground(new Color(144, 238, 144));
+		buttonZero.setFont(new Font("Times New Roman", Font.BOLD, 16));
+		buttonZero.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.addCharacterToDisplay('0');
+			}
+		});
+		buttonZero.setBounds(10, 250, 60, 34);
+		contentPane.add(buttonZero);
+		
+		buttonOne.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonOne.setBackground(new Color(144, 238, 144));
+		buttonOne.setFont(new Font("Times New Roman", Font.BOLD, 16));
+		buttonOne.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.addCharacterToDisplay('1');
+			}	
+		});
+		buttonOne.setBounds(10, 209, 60, 34);
+		contentPane.add(buttonOne);
+		
+		buttonTwo.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonTwo.setBackground(new Color(144, 238, 144));
+		buttonTwo.setFont(new Font("Times New Roman", Font.BOLD, 16));
+		buttonTwo.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.addCharacterToDisplay('2');
+			}
+		});
+		buttonTwo.setBounds(80, 209, 60, 34);
+		
+		contentPane.add(buttonTwo);
+		buttonThree.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonThree.setBackground(new Color(144, 238, 144));
+		buttonThree.setFont(new Font("Times New Roman", Font.BOLD, 16));
+		buttonThree.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.addCharacterToDisplay('3');
+			}
+		});
+		buttonThree.setBounds(150, 209, 60, 34);
+		contentPane.add(buttonThree);
+		
+		buttonFour.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonFour.setBackground(new Color(144, 238, 144));
+		buttonFour.setFont(new Font("Times New Roman", Font.BOLD, 16));
+		buttonFour.setForeground(Color.BLACK);
+		buttonFour.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.addCharacterToDisplay('4');
+			}
+		});
+		buttonFour.setBounds(10, 164, 60, 34);
+		contentPane.add(buttonFour);
+		
+		buttonFive.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonFive.setBackground(new Color(144, 238, 144));
+		buttonFive.setFont(new Font("Times New Roman", Font.BOLD, 16));
+		buttonFive.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.addCharacterToDisplay('5');
+			}
+		});
+		buttonFive.setBounds(80, 164, 60, 34);
+		contentPane.add(buttonFive);
+		
+		buttonSix.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonSix.setBackground(new Color(144, 238, 144));
+		buttonSix.setFont(new Font("Times New Roman", Font.BOLD, 16));
+		buttonSix.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.addCharacterToDisplay('6');
+			}
+		});
+		buttonSix.setBounds(150, 164, 60, 34);
+		contentPane.add(buttonSix);
+		
+		buttonSeven.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonSeven.setFont(new Font("Times New Roman", Font.BOLD, 16));
+		buttonSeven.setForeground(Color.BLACK);
+		buttonSeven.setBackground(new Color(144, 238, 144));
+		buttonSeven.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.addCharacterToDisplay('7');
+			}
+		});
+		buttonSeven.setBounds(10, 119, 60, 34);
+		contentPane.add(buttonSeven);
+		
+		buttonEight.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonEight.setBackground(new Color(144, 238, 144));
+		buttonEight.setFont(new Font("Times New Roman", Font.BOLD, 16));
+		buttonEight.setForeground(Color.BLACK);
+		buttonEight.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.addCharacterToDisplay('8');
+			}
+		});
+		buttonEight.setBounds(80, 119, 60, 34);
+		contentPane.add(buttonEight);
+		
+		buttonNine.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonNine.setBackground(new Color(144, 238, 144));
+		buttonNine.setFont(new Font("Times New Roman", Font.BOLD, 16));
+		buttonNine.setForeground(Color.BLACK);
+		buttonNine.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.addCharacterToDisplay('9');
+			}
+		});
+		buttonNine.setBounds(150, 119, 60, 34);
+		contentPane.add(buttonNine);
+		buttonAddition.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonAddition.setBackground(new Color(0, 206, 209));
+		buttonAddition.setFont(new Font("Times New Roman", Font.BOLD, 28));		
+		buttonAddition.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.awaitingCalculation("Addition");
+			}
+		});
+		buttonAddition.setBounds(228, 250, 90, 34);
+		contentPane.add(buttonAddition);
+		
+		buttonSubtraction.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonSubtraction.setBackground(new Color(0, 206, 209));
+		buttonSubtraction.setFont(new Font("Times New Roman", Font.BOLD, 28));
+		buttonSubtraction.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.awaitingCalculation("Subtraction");
+			}
+		});
+		buttonSubtraction.setBounds(228, 209, 90, 34);
+		contentPane.add(buttonSubtraction);
+		
+		buttonDivision.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonDivision.setBackground(new Color(0, 206, 209));
+		buttonDivision.setFont(new Font("Times New Roman", Font.BOLD, 28));
+		buttonDivision.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.awaitingCalculation("Division");
+			}
+		});
+		buttonDivision.setBounds(228, 119, 90, 34);
+		contentPane.add(buttonDivision);
+		
+		buttonMultiplication.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonMultiplication.setBackground(new Color(0, 206, 209));
+		buttonMultiplication.setFont(new Font("Times New Roman", Font.BOLD, 28));
+		buttonMultiplication.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.awaitingCalculation("Multiplication");
+			}
+		});
+		buttonMultiplication.setBounds(228, 164, 90, 34);
+		contentPane.add(buttonMultiplication);
+		
+		panel.setBackground(Color.WHITE);
+		panel.setBorder(new LineBorder(new Color(0, 0, 0)));
+		panel.setLayout(null);
+		panel.setBounds(18, 11, 288, 55);
+		contentPane.add(panel);
+		panel.setLayout(null);
+		
+		displayField = new JTextField();
+		displayField.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent arg0) {
+				frame.requestFocus();
+			}
+		});
+		doubleArrowsLb.setFont(new Font("Tahoma", Font.BOLD, 11));
+		
+		
+		doubleArrowsLb.setBounds(2, 5, 24, 14);
+		doubleArrowsLb.setVisible(false);
+		panel.add(doubleArrowsLb);
+		displayField.setBounds(20, 25, 262, 26);
+		panel.add(displayField);
+		displayField.setFont(new Font("Times New Roman", Font.PLAIN, 27));
+		displayField.setBackground(Color.WHITE);
+		displayField.setBorder(null);
+		displayField.setText("0");
+		displayField.setHorizontalAlignment(SwingConstants.RIGHT);
+		displayField.setColumns(10);
+		displayWaitingOperation.setEditable(false);
+		displayWaitingOperation.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent arg0) {
+				frame.requestFocus();
+			}
+		});
+		displayWaitingOperation.setBounds(23, 3, 262, 20);
+
+
+		displayWaitingOperation.setFont(new Font("Times New Roman", Font.PLAIN, 16));
+		displayWaitingOperation.setBackground(Color.WHITE);
+		displayWaitingOperation.setBorder(null);
+		displayWaitingOperation.setHorizontalAlignment(SwingConstants.RIGHT);
+		displayWaitingOperation.setColumns(10);
+		panel.add(displayWaitingOperation);
+		
+		buttonEquals.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonEquals.setActionCommand("=");
+		buttonEquals.setFont(new Font("Times New Roman", Font.BOLD, 22));
+		buttonEquals.setBackground(Color.CYAN);		
+		buttonEquals.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.displayResult(true);
+			}
+		});
+		buttonEquals.setBounds(150, 250, 60, 34);
+		contentPane.add(buttonEquals);
+		
+		buttonClearAll.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonClearAll.setBackground(new Color(255, 160, 122));
+		buttonClearAll.setFont(new Font("Times New Roman", Font.BOLD, 16));
+		buttonClearAll.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.clear();
+				
+			}
+		});
+		buttonClearAll.setBounds(20, 77, 85, 34);
+		contentPane.add(buttonClearAll);
+		
+		buttonBackSpace.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonBackSpace.setBackground(new Color(255, 160, 122));
+		buttonBackSpace.setFont(new Font("Times New Roman", Font.BOLD, 28));
+		buttonBackSpace.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.backspace();
+			}
+		});
+		buttonBackSpace.setBounds(115, 77, 85, 34);
+		contentPane.add(buttonBackSpace);
+		
+		buttonDecimal.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		buttonDecimal.setBackground(new Color(144, 238, 144));
+		buttonDecimal.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.addCharacterToDisplay('.');
+			}
+		});
+		buttonDecimal.setFont(new Font("Times New Roman", Font.BOLD, 16));
+		buttonDecimal.setBounds(80, 250, 60, 34);
+		contentPane.add(buttonDecimal);
+		
+		JButton btnFlipSign = new JButton("+/-");
+		btnFlipSign.setBorder(new LineBorder(new Color(0, 0, 0), 1, true));
+		btnFlipSign.setBackground(new Color(0, 206, 209));
+		btnFlipSign.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				frame.flipSign();
+				
+			}
+		});
+		btnFlipSign.setFont(new Font("Times New Roman", Font.BOLD, 28));
+		btnFlipSign.setBounds(228, 77, 90, 34);
+		contentPane.add(btnFlipSign);
+	}
+	
+	
+	/*
+	 	Called when either a number or decimal is pressed.
+	 	Appends the character to the end of the display.	  
+	*/
+	
+	private void addCharacterToDisplay(char ch) {
+		frame.requestFocus();
+		if(displaySb.length() >= 10 && !(displaySb.toString().contains("by"))) return; //Limiting the amount of numbers/characters they can enter.
+		if(dividedByZero) { this.clear();  } //If they divided by zero, then clear everything.
+		
+		if(clickedEquals) {
+			if(displaySb.length() >= 1) displaySb.delete(0, displaySb.length()).append("0");
+			if(operationDisplaySb.length() >= 1) operationDisplaySb.delete(0, operationDisplaySb.length());
+			displayWaitingOperation.setText("");
+			clickedEquals = false;
+		}
+		if(displaySb.length() == 1 && (displaySb.charAt(0) == '0' || replaceDisplayChar)) { //If we should replace the last number with this character.
+			if(ch == '.') {		//replaceDisplayChar is used after someone hits another operation (it displays the result, so when we enter a new number, it replaces the result with the new number)
+				displaySb.append(ch);
+			} else {
+				displaySb.replace(0, 1, ""+ch);
+			}
+			replaceDisplayChar = false;
+		} else if(displaySb.length() == 2 && (displaySb.toString().charAt(0) == '-' && displaySb.toString().charAt(1) == '0')) {
+			displaySb.replace(1, 2, ""+ch); //If they hit the flip sign button and there's only one number, just replace the number with the character selected.
+		}else {
+			if(ch == '.') {
+				if(!displaySb.toString().contains(".")) displaySb.append(ch);
+			} else {
+				displaySb.append(ch);
+			}
+		}
+		//Append the character selected to the StringBuilder object so we can redisplay it.
+		this.updateDisplay(); //Call the updateDisplay Method. 
+	}
+	
+	private void updateDisplay() { //Update the bottom display with the new character added.
+		displayField.setText(this.displaySb.toString());	
+		this.updateOperationDisplay(); //Call the top display update method.
+	}
+	
+	private void updateOperationDisplay() { //Update the top display with any new characters added.
+		displayWaitingOperation.setText(operationDisplaySb.toString());
+		
+		if(displayWaitingOperation.getText().length() >= 33) { //If the top display has 33 or more characters, then show the "<<" label.
+			doubleArrowsLb.setVisible(true);
+		} else doubleArrowsLb.setVisible(false);
+	}
+	
+	/*
+		Called when someone clicks an operation (addition/subtraction/multiplication/division).
+		Does a number of checks (validation) and then updating parts of the display. (See inside for more information)
+	*/
+	private void awaitingCalculation(String operation) {
+		frame.requestFocus();
+		boolean isDecimal = false;
+		char operationChar = 0;
+		
+		if(dividedByZero) { this.clear(); return; } //If they already divided by zero, return so it doesn't cause any issues with the top display.
+		
+		if(clickedEquals) { //If they already clicked '=' (equals), reset the top display for the new version (take the current result and put it in the top display).
+			if(displaySb.length() >= 1) displaySb.delete(0, displaySb.length()).append("0");
+			if(operationDisplaySb.length() >= 1) operationDisplaySb.delete(0, operationDisplaySb.length());
+			displayWaitingOperation.setText("");
+			clickedEquals = false;
+		}
+		if(this.operationReady) this.oldOperation = this.currentOperation; //If they already did an operation, set the old operation as the current one before we change the current one.
+				
+		switch(operation) { //Add an operation character to the top display appropriate to what operation they want to do.
+			case "Addition": { operationChar = '+'; currentOperation = OPERATION_TYPE_ADDITION; break; }
+			case "Subtraction":	{ operationChar = '-'; currentOperation = OPERATION_TYPE_SUBTRACTION; break; }
+			case "Multiplication": { operationChar = MULTIPLICATION_SYMBOL; currentOperation = OPERATION_TYPE_MULTIPLICATION; break; }
+			case "Division": { operationChar = DIVISION_SYMBOL; currentOperation = OPERATION_TYPE_DIVISION; break; }
+		}
+		
+		/* 	Checks whether or not the result is a decimal or not.
+	 		If the result is 20.5, it checks if it's greater than the original result casted (so 20.0).
+		 */
+		if(this.operationReady) { //If they already clicked an operation button, then replace the previous operation character with the new one in the top display.
+			
+			this.value2 = Double.parseDouble(displayField.getText()); //Parse the number they entered.
+			if(this.value2 != ((int) this.value2)) isDecimal = true;
+			
+			switch(oldOperation) { // Calculate the result depending on the operation they selected.
+				case OPERATION_TYPE_ADDITION: { this.value3 = calculator.addition( this.value1,  this.value2); break; }
+				case OPERATION_TYPE_SUBTRACTION: {  this.value3 = calculator.subtraction( this.value1,  this.value2); break;}
+				case OPERATION_TYPE_MULTIPLICATION: {  this.value3 = calculator.multiplication( this.value1,  this.value2); break;}
+				case OPERATION_TYPE_DIVISION: {  this.value3 = calculator.division( this.value1,  this.value2); break; }
+			}
+
+			if(displaySb.length() >= 1) displaySb.delete(0, displaySb.length());
+			displaySb.append("0");			
+			
+			//Check if the new number is a decimal or not for when we display it in the top display section.
+			if(this.value2 != ((int) (this.value2))) operationDisplaySb.append(" " + this.value2 + " " + this.getOperationCharacter(currentOperation));
+			else operationDisplaySb.append(" " + (int) (this.value2) + " " + this.getOperationCharacter(currentOperation));
+			
+			this.updateOperationDisplay();
+			
+			//Check if the output should be casted to a whole number.
+			if(this.value3 != ((int) (this.value3))) displayField.setText(""+this.value3);
+			else displayField.setText(""+(int) (this.value3));
+			
+			this.value1 = this.value3; //Make value1 equal value3 so when we do more calculations, we're using the updated numbers.
+			return;
+
+		} else {
+			this.value1 = Double.parseDouble(displayField.getText()); //Parse the number they entered.
+			if(this.value1 != ((int) this.value1)) isDecimal = true;
+			if(isDecimal) operationDisplaySb.append("" + value1); //Append the result if its a decimal.
+			else operationDisplaySb.append("" + (int) value1); //Appended the casted result if its not a decimal.
+			
+			operationDisplaySb.append(" " + operationChar); //Append the appropriate operation character.
+			this.displayWaitingOperation.setText(operationDisplaySb.toString()); //Set the top display's text. 
+
+			if(displaySb.length() >= 1) displaySb.delete(0, displaySb.length()).append("0"); //Delete the contents of the displaySb object and append '0' to it.
+			
+			this.operationReady = true; //Set our instance variable to true, which tells us if they clicked an operation button.
+
+			this.updateDisplay(); //Update the display.
+		}	
+	}
+	
+	/*
+	 	Take the result of the calculation and set the bottom display's text to it.
+	 */
+	private void displayResult(boolean clickedEqualsBtn) { //Display the result of the calculation.
+		frame.requestFocus();
+		if(displayField.getText().contains("by 0")) return; //If they tried to divide by zero (and got the error message)
+		if(clickedEquals) return;
+		if(!operationReady) return;
+		
+		boolean willBeDecimal = false;
+		boolean isDecimal = false;
+		double result = 0.0D; //Initialize these variables to 0.0.
+		
+		if(operationDisplaySb.length() >= 1) {
+			
+			this.value2 = Double.parseDouble(displayField.getText());	
+
+			//Do not allow them to divide by 0.
+			if(this.value2 == 0.0 && currentOperation == OPERATION_TYPE_DIVISION) {
+				if(displaySb.length() >= 1) { 
+					displaySb.delete(0, displaySb.length());
+					displaySb.append("Cannot divide by 0");
+					this.updateDisplay();
+					this.dividedByZero = true;
+				}
+				return;
+			}
+			
+			switch(currentOperation) { // Calculate the result depending on the operation they selected.
+				case OPERATION_TYPE_ADDITION: { result = calculator.addition( this.value1,  this.value2); break; }
+				case OPERATION_TYPE_SUBTRACTION: {  result = calculator.subtraction( this.value1,  this.value2); break;}
+				case OPERATION_TYPE_MULTIPLICATION: {  result = calculator.multiplication( this.value1,  this.value2); break;}
+				case OPERATION_TYPE_DIVISION: {  result =  calculator.division( this.value1,  this.value2); break; }
+			}
+
+			
+			/* 	Checks whether or not the result is a decimal or not.
+			 	If the result is 20.5, it checks if it's greater than the original result casted (so 20.0).
+			 */
+			if(result > ((int) result)) willBeDecimal = true; 		
+
+			if(this.value2 != ((int) (this.value2))) isDecimal = true;
+			if(isDecimal) operationDisplaySb.append(" "+ this.value2);
+			else operationDisplaySb.append(" "+ (int) this.value2);
+			
+			if(clickedEqualsBtn) { //Only add the '=' part if they click the equals button.
+				operationDisplaySb.append(" = ");
+				displayWaitingOperation.setText(operationDisplaySb.toString());
+				this.clickedEquals = true;
+				this.clear(); //Clears everything (resets variables, etc.)
+			} 
+
+			StringBuilder resultSb = null;
+			if(willBeDecimal) { //If the result is a decimal, display the decimal result. 
+				resultSb = new StringBuilder(""+result);
+				displayField.setText(""+result);
+				if(displaySb.length() >= 1) displaySb.delete(0, displaySb.length()).append(""+result);
+			}
+			else { //If the result is NOT a decimal, then display the casted result. (removing the .0 part)
+				resultSb = new StringBuilder(""+(int)(result));
+				if(displaySb.length() >= 1) displaySb.delete(0, displaySb.length()).append(""+(int)result);
+			}
+			if(resultSb.length()>= 12) resultSb.delete(13, resultSb.length());
+			
+			displayField.setText(resultSb.toString());
+			this.clickedEquals = true;
+		}
+	}
+	
+	
+	/* 
+	 		Called when the undo button is pressed.
+	 		Basically removes the last character entered.
+	 */
+	private void backspace() {
+		frame.requestFocus();
+		
+		if(displaySb.length() == 1) {
+			displaySb.replace(0, displaySb.length(), "0"); //If there's only one number on the screen and they click undo, just set that character to '0'.
+		} else {
+			//If there's more than one number, then just delete the latest number entered.
+			if(displaySb.length() >= 1) displaySb.delete(displaySb.length() - 1, displaySb.length());
+		}
+		
+		if(displaySb.length() == 0) displaySb.append("0");
+		
+		this.updateDisplay();
+	}
+	
+	/* 
+		Called when the clear button is pressed.
+		Basically removes the last character entered.
+		
+	 */
+	private void clear() {
+		frame.requestFocus();
+		
+		if(displaySb.length() >= 1) displaySb.delete(0, displaySb.length()).append("0"); //Delete the contents of the StringBuilder and then append 0 to it.
+		//if(operationDisplaySb.length() >= 1) operationDisplaySb.delete(0, operationDisplaySb.length()); //Delete the contents of the StringBuilder.
+		//^ was causing the top display to delete everything when someone clicked equals (forgot to comment out when I reworked the code).
+		this.updateDisplay();
+		this.updateOperationDisplay();
+		
+		doubleArrowsLb.setVisible(false);
+		
+		//Set these instance booleans to false.
+		this.dividedByZero = false; 
+		this.operationReady = false;
+		this.clickedEquals = false;
+		this.replaceDisplayChar = true;
+	
+		this.value1 = this.value2 = this.value3 = 0.0D;
+		this.oldOperation = 0;
+		this.currentOperation = 0;
+	}
+
+	
+	@Override
+	public void keyTyped(KeyEvent e) { }
+
+	/*
+	 	Called when someone presses a button.
+	 
+	 */
+	@Override
+	public void keyPressed(KeyEvent e) {
+		int keyCode = e.getKeyCode();
+		switch(keyCode) {
+			//If they press down the Shift key, set our variable to true.
+			//We do this for when people need to use SHIFT & 8 or SHIFT & = to do multiplication or addition.
+			//When they release the key, we set it to false in the keyReleased method.
+			case KeyEvent.VK_SHIFT: { shiftPressed = true; break; } 														
+		}
+	}
+
+	/*
+ 		Called when someone releases a button they pressed.
+ 
+	 */
+	@Override
+	public void keyReleased(KeyEvent e) {
+		//System.out.println("Code: " + e.getKeyCode());
+		if(keyEnteredTime == 0 || (System.currentTimeMillis() - keyEnteredTime > 50)) { //Avoiding the 'double entry' issue.
+			int keyCode = e.getKeyCode();
+			switch(keyCode) {
+				case KeyEvent.VK_SHIFT: { shiftPressed = false; break; }
+				case KeyEvent.VK_BACK_SPACE: { this.backspace(); break; }
+				case KeyEvent.VK_NUMPAD0: { }
+				case KeyEvent.VK_0: { this.addCharacterToDisplay('0'); break; }
+				case KeyEvent.VK_NUMPAD1: { }
+				case KeyEvent.VK_1: { this.addCharacterToDisplay('1'); break; }
+				case KeyEvent.VK_NUMPAD2: {  }
+				case KeyEvent.VK_2: { this.addCharacterToDisplay('2'); break; }
+				case KeyEvent.VK_NUMPAD3: {  }
+				case KeyEvent.VK_3: { this.addCharacterToDisplay('3'); break; }
+				case KeyEvent.VK_NUMPAD4: { }
+				case KeyEvent.VK_4: { this.addCharacterToDisplay('4'); break; }
+				case KeyEvent.VK_NUMPAD5: { }
+				case KeyEvent.VK_5: { this.addCharacterToDisplay('5'); break; }
+				case KeyEvent.VK_NUMPAD6: {  }
+				case KeyEvent.VK_6: { this.addCharacterToDisplay('6'); break; }
+				case KeyEvent.VK_NUMPAD7: {  }
+				case KeyEvent.VK_7: { this.addCharacterToDisplay('7'); break; }
+				case KeyEvent.VK_NUMPAD8: {  }
+				case KeyEvent.VK_8: { 
+					if(keyCode != KeyEvent.VK_NUMPAD8 && shiftPressed) { this.awaitingCalculation("Multiplication"); break; }
+					else { this.addCharacterToDisplay('8'); break; }
+				}
+				case KeyEvent.VK_NUMPAD9: {  }
+				case KeyEvent.VK_9: { this.addCharacterToDisplay('9'); break; }
+				case KeyEvent.VK_ADD: { this.awaitingCalculation("Addition"); break; }
+				case 109: { } //Numpad '-'.
+				case KeyEvent.VK_MINUS: { this.awaitingCalculation("Subtraction"); break; }
+				case KeyEvent.VK_MULTIPLY: { this.awaitingCalculation("Multiplication"); break; }
+				case 47: { } //Normal divide
+				case KeyEvent.VK_DIVIDE: { this.awaitingCalculation("Division"); break; }
+				case 110: { } //Numpad '.'
+				case KeyEvent.VK_PERIOD: { this.addCharacterToDisplay('.'); break; }
+				case KeyEvent.VK_EQUALS: { 
+					if(shiftPressed) { this.awaitingCalculation("Addition"); break; }
+					else { }
+				}
+				case KeyEvent.VK_ENTER: { this.displayResult(true); break; }
+			}
+			keyEnteredTime = System.currentTimeMillis(); //Record the time (in milliseconds) of the system. 
+		}
+		frame.requestFocus();
+	}
+	
+	/*
+	 Depending on what our current operation is, return a character to display that operation.
+	 */
+	private char getOperationCharacter(int operation) {
+		char operationChar = 0;
+		
+		switch(operation) { //Add an operation character to the top display appropriate to what operation they want to do.
+			case OPERATION_TYPE_ADDITION: { operationChar = '+'; break; }
+			case OPERATION_TYPE_SUBTRACTION:	{ operationChar = '-'; break; }
+			case OPERATION_TYPE_MULTIPLICATION: { operationChar = MULTIPLICATION_SYMBOL; break; }
+			case OPERATION_TYPE_DIVISION: { operationChar = DIVISION_SYMBOL; break; }
+		}
+		
+		return operationChar;
+	}
+	/*
+	 		Called when the +/- button is pressed.
+	 		Adds/removes a minus sign from the front of the sum.
+	 */
+	private void flipSign() {
+		this.requestFocus();
+		if(displaySb.length() >= 1) {
+			if(displaySb.toString().contains("by")) { //If the bottom display has the "Cannot divide by 0" message, delete it and put a "0" by itself.
+				this.clear();
+				displaySb.delete(0, displaySb.length()).append("0");
+			}
+			
+			if(displaySb.charAt(0) == '-') { //If the number they are entering has the minus sign, remove it.
+				displaySb.delete(0, 1);
+			} else displaySb.insert(0,"-"); //else, add it to the beginning of the number.
+			
+			frame.updateDisplay();
+		}
+	}
+
+	@Override
+	public void addNotify() {		
+		super.addNotify();
+		if(null == thread) {
+			thread = new Thread(this);
+			thread.start();
+		}
+		this.addKeyListener(this);
+	}
+	
+	
+	@Override
+	public void run() {
+		this.requestFocus();
+	}
+}
+
+
+/*
+ 	Simple Calculator class that will do the calculations for us.
+ */
+
+class Calculator {
+
+	//These methods are self-explanatory. 
+	public int addition(int val1, int val2) {
+		return (val1 + val2);
+	}
+	public double addition(double val1, double val2) {
+		return (val1 + val2);
+	}
+
+
+	public int subtraction(int val1, int val2) {
+		return (val1 - val2);
+	}
+	public double subtraction(double val1, double val2) {
+		return (val1 - val2);
+	}
+	
+	
+	public int multiplication(int val1, int val2) {
+		return (val1 * val2);
+	}
+	public double multiplication(double val1, double val2) {
+		return (val1 * val2);
+	}
+	
+	
+	public int division(int val1, int val2) {
+		return (val1 / val2);
+	}
+	public double division(double val1, double val2) {
+		return (val1 / val2);
+	}
+}
